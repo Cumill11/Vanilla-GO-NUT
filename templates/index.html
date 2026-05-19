@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="pl">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>VanillaNUT</title>
+    <link href="/static/bootstrap.min.css" rel="stylesheet">
+    <link href="/static/bootstrap-icons.min.css" rel="stylesheet">
+    <link rel="icon" href="/static/favicon.ico">
+    <style>
+        html, body {
+            background-color: #0f0f0f;
+            color: #e0e0e0;
+        }
+        .page-wrapper {
+            background-color: #161616;
+            border-radius: 12px;
+            padding: 24px;
+            min-height: 100vh;
+        }
+        .page-header {
+            border-bottom: 1px solid #242424;
+            padding-bottom: 16px;
+            margin-bottom: 24px;
+        }
+
+        /* Cards */
+        .ups-card {
+            background-color: #1c1c1c;
+            border: 1px solid #282828;
+            border-top: 3px solid #444;
+            border-radius: 10px;
+            color: #e0e0e0;
+        }
+        .border-status-success { border-top-color: #00c853; }
+        .border-status-danger  { border-top-color: #d50000; }
+        .border-status-warning { border-top-color: #ffab00; }
+        .border-status-info    { border-top-color: #00b8d4; }
+        .border-status-primary { border-top-color: #6200ea; }
+
+        .ups-card .card-header {
+            background-color: #202020 !important;
+            border-bottom: 1px solid #282828;
+            border-radius: 9px 9px 0 0 !important;
+            padding: 10px 16px;
+            color: #e0e0e0;
+        }
+        .ups-card .card-body {
+            padding: 16px;
+        }
+
+        /* Stat boxes */
+        .stat-box {
+            background: #242424;
+            border-radius: 8px;
+            padding: 10px 12px;
+            border: 1px solid #2e2e2e;
+            height: 100%;
+        }
+        .stat-label {
+            font-size: 0.68rem;
+            color: #999;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-bottom: 4px;
+        }
+        .stat-value {
+            font-size: 0.88rem;
+            font-weight: 600;
+            color: #ddd;
+        }
+
+        /* Battery */
+        .progress {
+            height: 10px;
+            border-radius: 5px;
+            background-color: #2a2a2a;
+        }
+        .progress-bar { border-radius: 5px; }
+
+        /* Badge colors */
+        .badge             { color: #121212; }
+        .badge.bg-danger   { color: #fff; }
+        .badge.bg-primary  { color: #fff; }
+        .bg-success { background-color: #00c853 !important; }
+        .bg-danger  { background-color: #d50000 !important; }
+        .bg-warning { background-color: #ffab00 !important; }
+        .bg-info    { background-color: #00b8d4 !important; }
+        .bg-primary { background-color: #6200ea !important; }
+
+        #countdown { font-weight: 600; }
+        .card-meta { color: #888; font-size: 0.75rem; }
+    </style>
+</head>
+<body>
+<div class="container-fluid page-wrapper">
+
+    <div class="d-flex flex-column flex-md-row align-items-center justify-content-md-between gap-2 page-header">
+        <div class="d-flex align-items-center justify-content-center justify-content-md-start">
+            <img src="/static/logo.svg" alt="Logo" style="height: 3.5em;" class="me-1">
+            <h1 class="m-0 fs-3">VanillaNUT</h1>
+        </div>
+        <div class="text-center text-md-end" style="color: #adb5bd; font-size: 0.82rem; line-height: 1.7;">
+            <i class="bi bi-clock me-1"></i>Ostatnia aktualizacja: {{ .LastUpdated }}<br>
+            <i class="bi bi-arrow-repeat me-1"></i>Odświeżenie za <span id="countdown">{{ .RefreshSeconds }}</span>s
+        </div>
+    </div>
+
+    <div class="row g-4">
+        {{range .UPSCards}}
+        <div class="col-12 col-md-6">
+
+            {{if .IsError}}
+            <div class="card ups-card border-status-danger h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span class="fw-semibold">
+                        <i class="bi bi-exclamation-triangle me-2 text-danger"></i>{{.Host}}
+                    </span>
+                    <span class="badge bg-danger">Błąd połączenia</span>
+                </div>
+                <div class="card-body">
+                    <p class="mb-0" style="color: #bbb; font-size: 0.85rem;">{{.ErrorMessage}}</p>
+                </div>
+            </div>
+
+            {{else}}
+            <div class="card ups-card {{.BorderClass}} h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span class="fw-semibold">
+                        <i class="bi bi-hdd-rack me-2"></i>{{.DisplayName}}
+                    </span>
+                    <span class="badge {{.StatusColor}}">{{.StatusLabel}}</span>
+                </div>
+                <div class="card-body">
+
+                    <!-- Battery -->
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between mb-1">
+                            <small class="stat-label"><i class="bi bi-battery-half me-1"></i>Bateria</small>
+                            <small class="fw-bold">{{.Charge}}%</small>
+                        </div>
+                        <div class="progress">
+                            <div class="progress-bar {{.ChargeClass}}" role="progressbar"
+                                 style="width: {{.Charge}}%;"
+                                 aria-valuenow="{{.Charge}}" aria-valuemin="0" aria-valuemax="100"></div>
+                        </div>
+                    </div>
+
+                    <!-- Stats row 1 -->
+                    <div class="row g-2 mb-2">
+                        <div class="col-6">
+                            <div class="stat-box">
+                                <div class="stat-label"><i class="bi bi-bar-chart me-1"></i>Moc</div>
+                                <div class="stat-value">{{.MOC}} / {{.NominalPower}} W</div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="stat-box">
+                                <div class="stat-label"><i class="bi bi-clock me-1"></i>Czas pracy</div>
+                                <div class="stat-value">{{.Runtime}}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Stats row 2 -->
+                    <div class="row g-2">
+                        <div class="col-4">
+                            <div class="stat-box">
+                                <div class="stat-label"><i class="bi bi-lightning-charge me-1"></i>Nap. bat.</div>
+                                <div class="stat-value">{{.BatteryVolt}} V</div>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="stat-box">
+                                <div class="stat-label"><i class="bi bi-arrow-down-circle me-1"></i>Wejście</div>
+                                <div class="stat-value">{{.InputVolt}} V</div>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="stat-box">
+                                <div class="stat-label"><i class="bi bi-arrow-up-circle me-1"></i>Wyjście</div>
+                                <div class="stat-value">{{.OutputVolt}} V</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Model + IP -->
+                    <div class="mt-3 pt-2 d-flex justify-content-between" style="border-top: 1px solid #242424;">
+                        <small class="card-meta">
+                            <i class="bi bi-info-circle me-1"></i>{{.Model}}
+                        </small>
+                        <small class="card-meta">
+                            <i class="bi bi-hdd-network me-1"></i>{{.Host}}
+                        </small>
+                    </div>
+
+                </div>
+            </div>
+            {{end}}
+
+        </div>
+        {{end}}
+    </div>
+
+</div>
+
+<script src="/static/bootstrap.bundle.min.js"></script>
+<script>
+  let seconds = {{ .RefreshSeconds }};
+  const countdownEl = document.getElementById('countdown');
+  const interval = setInterval(() => {
+    seconds--;
+    countdownEl.textContent = seconds;
+    if (seconds <= 0) {
+      clearInterval(interval);
+      window.location.reload();
+    }
+  }, 1000);
+</script>
+</body>
+</html>

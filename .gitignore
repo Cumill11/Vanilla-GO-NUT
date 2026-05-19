@@ -1,0 +1,8 @@
+vanillanut
+.env
+
+# Go build artifacts
+*.exe
+*.test
+*.out
+/dist/
