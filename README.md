@@ -53,8 +53,7 @@ cp .env.example .env
 
 ```env
 PORT=5000
-NUT_SERVERS=192.168.1.10:3493,192.168.1.11:3493
-NUT_MODEL_NAMES=VP1200ELCD:UPS Mac,VP1600ELCD:UPS Server
+NUT_SERVERS=UPS Mac=192.168.1.10:3493,UPS Server=192.168.1.11:3493
 NUT_OL_CHRG_AS_ONLINE=VI2200SHL
 REFRESH_INTERVAL=30
 ```
@@ -62,8 +61,7 @@ REFRESH_INTERVAL=30
 | Variable                | Description                                                                                   |
 |-------------------------|-----------------------------------------------------------------------------------------------|
 | `PORT`                  | HTTP listen port (default: `5000`)                                                            |
-| `NUT_SERVERS`           | Comma-separated list of NUT servers, format `host:port`                                       |
-| `NUT_MODEL_NAMES`       | Model-to-friendly-name mappings, format `MODEL:Name,MODEL2:Name2`                             |
+| `NUT_SERVERS`           | Comma-separated list of NUT servers, format `Name=host:port` (`Name=` optional, port defaults to `3493`); the name is the card title even when the UPS is offline |
 | `NUT_OL_CHRG_AS_ONLINE` | Models for which `OL CHRG` status is shown as "Online" instead of "Charging" (comma-separated) |
 | `REFRESH_INTERVAL`      | Data and page refresh interval in seconds (default: `30`)                                     |
 
@@ -138,8 +136,7 @@ Type=simple
 User=kamil
 WorkingDirectory=/opt/vanillanut
 Environment=PORT=5000
-Environment=NUT_SERVERS=192.168.1.10:3493,192.168.1.11:3493
-Environment=NUT_MODEL_NAMES=VP1200ELCD:UPS Mac,VP1600ELCD:UPS Server
+Environment="NUT_SERVERS=UPS Mac=192.168.1.10:3493,UPS Server=192.168.1.11:3493"
 Environment=NUT_OL_CHRG_AS_ONLINE=VI2200SHL
 Environment=REFRESH_INTERVAL=30
 ExecStart=/opt/vanillanut/vanillanut
@@ -152,11 +149,11 @@ WantedBy=multi-user.target
 
 Uwagi / Notes:
 
-- Każda zmienna to osobna linia `Environment=`. Wartości ze spacjami (np. `NUT_MODEL_NAMES`) nie wymagają cudzysłowów, ale jeśli ich użyjesz, cała para musi być w jednym cudzysłowie: `Environment="NUT_MODEL_NAMES=VP1200ELCD:UPS Mac"`.
+- Każda zmienna to osobna linia `Environment=`. Wartości ze spacjami (np. `NUT_SERVERS`) muszą być w cudzysłowie obejmującym całą parę: `Environment="NUT_SERVERS=UPS Mac=192.168.1.10:3493"`.
 - Po każdej zmianie pliku usługi wykonaj `sudo systemctl daemon-reload` i `sudo systemctl restart vanillanut`.
 - Plik usługi jest czytelny dla wszystkich (`/etc/systemd/system`). Jeśli konfiguracja zawiera dane wrażliwe, pozostań przy `EnvironmentFile=` z ograniczonymi uprawnieniami (`sudo chmod 600 /opt/vanillanut/.env`).
 
-- Each variable is a separate `Environment=` line. Values with spaces (e.g. `NUT_MODEL_NAMES`) don't need quotes, but if you use them, the whole pair must be quoted: `Environment="NUT_MODEL_NAMES=VP1200ELCD:UPS Mac"`.
+- Each variable is a separate `Environment=` line. Values with spaces (e.g. `NUT_SERVERS`) must be quoted around the whole pair: `Environment="NUT_SERVERS=UPS Mac=192.168.1.10:3493"`.
 - After any change to the service file run `sudo systemctl daemon-reload` and `sudo systemctl restart vanillanut`.
 - The service file is world-readable (`/etc/systemd/system`). If your configuration contains sensitive data, keep using `EnvironmentFile=` with restricted permissions (`sudo chmod 600 /opt/vanillanut/.env`).
 

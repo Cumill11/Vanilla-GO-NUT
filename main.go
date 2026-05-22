@@ -30,7 +30,6 @@ var staticFS embed.FS
 var (
 	tmpl               *template.Template
 	nutServers         []NUTServer
-	modelNames         map[string]string
 	olChrgOnlineModels map[string]bool
 	refreshSeconds     int
 
@@ -39,6 +38,7 @@ var (
 )
 
 type NUTServer struct {
+	Name string
 	Host string
 	Port int
 }
@@ -152,6 +152,8 @@ func (c *NUTClient) Close() {
 	c.conn.Close()
 }
 
+// parseNUTServers parses NUT_SERVERS entries of the form "Name=host:port".
+// The "Name=" prefix is optional; port defaults to 3493.
 func parseNUTServers() []NUTServer {
 	var servers []NUTServer
 	for _, entry := range strings.Split(os.Getenv("NUT_SERVERS"), ",") {
@@ -159,31 +161,26 @@ func parseNUTServers() []NUTServer {
 		if entry == "" {
 			continue
 		}
+
+		name := ""
+		if idx := strings.Index(entry, "="); idx >= 0 {
+			name = strings.TrimSpace(entry[:idx])
+			entry = strings.TrimSpace(entry[idx+1:])
+		}
+
+		host := entry
+		port := 3493
 		if strings.Contains(entry, ":") {
 			parts := strings.SplitN(entry, ":", 2)
-			host := strings.TrimSpace(parts[0])
-			port, err := strconv.Atoi(strings.TrimSpace(parts[1]))
-			if err != nil {
-				port = 3493
+			host = strings.TrimSpace(parts[0])
+			if p, err := strconv.Atoi(strings.TrimSpace(parts[1])); err == nil {
+				port = p
 			}
-			servers = append(servers, NUTServer{Host: host, Port: port})
-		} else {
-			servers = append(servers, NUTServer{Host: entry, Port: 3493})
 		}
+
+		servers = append(servers, NUTServer{Name: name, Host: host, Port: port})
 	}
 	return servers
-}
-
-func parseModelNames() map[string]string {
-	names := make(map[string]string)
-	for _, entry := range strings.Split(os.Getenv("NUT_MODEL_NAMES"), ",") {
-		entry = strings.TrimSpace(entry)
-		if strings.Contains(entry, ":") {
-			parts := strings.SplitN(entry, ":", 2)
-			names[strings.TrimSpace(parts[0])] = strings.TrimSpace(parts[1])
-		}
-	}
-	return names
 }
 
 func parseOLChrgOnlineModels() map[string]bool {
@@ -249,19 +246,37 @@ func getChargeClass(charge int) string {
 	}
 }
 
+// getStatusInfo interprets the NUT ups.status field, which is a
+// space-separated set of flags (e.g. "OL CHRG", "OB LB DISCHRG").
+// Flags are matched individually so unexpected combinations
+// (OL RB, OL TRIM, OB LB, ...) still resolve to a sensible state.
 func getStatusInfo(status, model string, charge int) (string, string) {
-	switch status {
-	case "OL":
-		return "Online", "bg-success"
-	case "OB DISCHRG":
-		return "Zasilanie bateryjne", "bg-danger"
-	case "OL CHRG":
+	flags := make(map[string]bool)
+	for _, f := range strings.Fields(status) {
+		flags[f] = true
+	}
+
+	lowBattSuffix := ""
+	if flags["LB"] {
+		lowBattSuffix = " (Bateria prawie pusta)"
+	}
+
+	switch {
+	case flags["OB"]:
+		return "Zasilanie bateryjne" + lowBattSuffix, "bg-danger"
+
+	case flags["OL"] && flags["CHRG"]:
 		if olChrgOnlineModels[model] && charge >= 100 {
 			return "Online", "bg-success"
 		}
-		return "Ładowanie", "bg-warning"
-	case "OL CHRG LB":
-		return "Ładowanie (Bateria prawie pusta)", "bg-warning"
+		return "Ładowanie" + lowBattSuffix, "bg-warning"
+
+	case flags["OL"]:
+		if flags["LB"] {
+			return "Online" + lowBattSuffix, "bg-warning"
+		}
+		return "Online", "bg-success"
+
 	default:
 		return "Nieznane", "bg-info"
 	}
@@ -271,16 +286,26 @@ func getBorderClass(statusColor string) string {
 	return "border-status-" + strings.TrimPrefix(statusColor, "bg-")
 }
 
+// serverLabel returns the configured server name, falling back to host.
+func serverLabel(server NUTServer) string {
+	if server.Name != "" {
+		return server.Name
+	}
+	return server.Host
+}
+
 func fetchServer(server NUTServer) []UPSCard {
+	label := serverLabel(server)
+
 	client, err := connectNUT(server.Host, server.Port)
 	if err != nil {
-		return []UPSCard{{IsError: true, Host: server.Host, ErrorMessage: err.Error()}}
+		return []UPSCard{{IsError: true, DisplayName: label, Host: server.Host, ErrorMessage: err.Error()}}
 	}
 	defer client.Close()
 
 	upsList, err := client.ListUPS()
 	if err != nil {
-		return []UPSCard{{IsError: true, Host: server.Host, ErrorMessage: err.Error()}}
+		return []UPSCard{{IsError: true, DisplayName: label, Host: server.Host, ErrorMessage: err.Error()}}
 	}
 
 	var cards []UPSCard
@@ -289,6 +314,7 @@ func fetchServer(server NUTServer) []UPSCard {
 		if err != nil {
 			cards = append(cards, UPSCard{
 				IsError:      true,
+				DisplayName:  label,
 				Host:         server.Host,
 				ErrorMessage: fmt.Sprintf("%s: %v", upsName, err),
 			})
@@ -305,9 +331,9 @@ func fetchServer(server NUTServer) []UPSCard {
 		moc := math.Round(realpower*load/100*10) / 10
 		statusLabel, statusColor := getStatusInfo(status, model, charge)
 
-		displayName := model
-		if name, ok := modelNames[model]; ok {
-			displayName = name
+		displayName := label
+		if len(upsList) > 1 {
+			displayName = label + " — " + upsName
 		}
 
 		cards = append(cards, UPSCard{
@@ -390,7 +416,6 @@ func main() {
 	_ = godotenv.Load()
 
 	nutServers = parseNUTServers()
-	modelNames = parseModelNames()
 	olChrgOnlineModels = parseOLChrgOnlineModels()
 
 	refreshSeconds = 30
