@@ -51,6 +51,7 @@ type NUTClient struct {
 type UPSCard struct {
 	IsError      bool
 	Host         string
+	ErrorSummary string
 	ErrorMessage string
 	DisplayName  string
 	Model        string
@@ -233,8 +234,6 @@ func fmtRuntime(seconds float64) string {
 
 func getChargeClass(charge int) string {
 	switch {
-	case charge == 100:
-		return "bg-success"
 	case charge < 26:
 		return "bg-danger"
 	case charge < 50:
@@ -242,7 +241,7 @@ func getChargeClass(charge int) string {
 	case charge < 75:
 		return "bg-info"
 	default:
-		return "bg-primary"
+		return "bg-success"
 	}
 }
 
@@ -286,6 +285,30 @@ func getBorderClass(statusColor string) string {
 	return "border-status-" + strings.TrimPrefix(statusColor, "bg-")
 }
 
+// friendlyError turns a raw connection/protocol error into a readable
+// Polish message for the dashboard. The raw error is still kept separately.
+func friendlyError(err error) string {
+	msg := strings.ToLower(err.Error())
+	switch {
+	case strings.Contains(msg, "no route to host"):
+		return "Host nieosiągalny — serwer wyłączony lub brak połączenia sieciowego"
+	case strings.Contains(msg, "connection refused"):
+		return "Połączenie odrzucone — usługa NUT nie działa na tym porcie"
+	case strings.Contains(msg, "i/o timeout"), strings.Contains(msg, "deadline exceeded"):
+		return "Przekroczono czas połączenia — host nie odpowiada"
+	case strings.Contains(msg, "no such host"):
+		return "Nie znaleziono hosta — sprawdź adres serwera"
+	case strings.Contains(msg, "network is unreachable"):
+		return "Sieć nieosiągalna"
+	case strings.Contains(msg, "connection reset"):
+		return "Połączenie przerwane przez serwer"
+	case strings.HasPrefix(msg, "err"):
+		return "Serwer NUT zwrócił błąd"
+	default:
+		return "Błąd połączenia z serwerem"
+	}
+}
+
 // serverLabel returns the configured server name, falling back to host.
 func serverLabel(server NUTServer) string {
 	if server.Name != "" {
@@ -299,13 +322,15 @@ func fetchServer(server NUTServer) []UPSCard {
 
 	client, err := connectNUT(server.Host, server.Port)
 	if err != nil {
-		return []UPSCard{{IsError: true, DisplayName: label, Host: server.Host, ErrorMessage: err.Error()}}
+		return []UPSCard{{IsError: true, DisplayName: label, Host: server.Host,
+			ErrorSummary: friendlyError(err), ErrorMessage: err.Error()}}
 	}
 	defer client.Close()
 
 	upsList, err := client.ListUPS()
 	if err != nil {
-		return []UPSCard{{IsError: true, DisplayName: label, Host: server.Host, ErrorMessage: err.Error()}}
+		return []UPSCard{{IsError: true, DisplayName: label, Host: server.Host,
+			ErrorSummary: friendlyError(err), ErrorMessage: err.Error()}}
 	}
 
 	var cards []UPSCard
@@ -316,6 +341,7 @@ func fetchServer(server NUTServer) []UPSCard {
 				IsError:      true,
 				DisplayName:  label,
 				Host:         server.Host,
+				ErrorSummary: friendlyError(err),
 				ErrorMessage: fmt.Sprintf("%s: %v", upsName, err),
 			})
 			continue
@@ -328,8 +354,16 @@ func fetchServer(server NUTServer) []UPSCard {
 		model := vars["device.model"]
 		status := vars["ups.status"]
 
-		moc := math.Round(realpower*load/100*10) / 10
 		statusLabel, statusColor := getStatusInfo(status, model, charge)
+
+		// MOC (current power draw) is only meaningful when the
+		// nominal power is known; otherwise show it as N/A too.
+		nominalPower := fmt1(vars["ups.realpower.nominal"])
+		moc := "N/A"
+		if nominalPower != "N/A" {
+			v := math.Round(realpower*load/100*10) / 10
+			moc = strconv.FormatFloat(v, 'f', 1, 64)
+		}
 
 		displayName := label
 		if len(upsList) > 1 {
@@ -346,8 +380,8 @@ func fetchServer(server NUTServer) []UPSCard {
 			BorderClass:  getBorderClass(statusColor),
 			Charge:       charge,
 			ChargeClass:  getChargeClass(charge),
-			MOC:          strconv.FormatFloat(moc, 'f', 1, 64),
-			NominalPower: fmt1(vars["ups.realpower.nominal"]),
+			MOC:          moc,
+			NominalPower: nominalPower,
 			Runtime:      fmtRuntime(runtime),
 			BatteryVolt:  fmt1(vars["battery.voltage"]),
 			InputVolt:    fmt1(vars["input.voltage"]),

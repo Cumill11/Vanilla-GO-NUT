@@ -1,0 +1,18 @@
+[Unit]
+Description=VanillaNUT - UPS monitoring dashboard
+After=network.target
+
+[Service]
+Type=simple
+User=kamil
+WorkingDirectory=/opt/vanillanut
+Environment=PORT=5010
+Environment="NUT_SERVERS=UPS Mac=10.0.1.2:3493,UPS Server=10.0.1.9:3493,UPS Torrent=10.0.1.28:3493,UPS Drukarka=10.0.1.27:3493"
+Environment=NUT_OL_CHRG_AS_ONLINE=VI2200SHL
+Environment=REFRESH_INTERVAL=30
+ExecStart=/opt/vanillanut/vanillanut
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
