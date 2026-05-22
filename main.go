@@ -249,14 +249,14 @@ func getChargeClass(charge int) string {
 	}
 }
 
-func getStatusInfo(status, model string) (string, string) {
+func getStatusInfo(status, model string, charge int) (string, string) {
 	switch status {
 	case "OL":
 		return "Online", "bg-success"
 	case "OB DISCHRG":
 		return "Zasilanie bateryjne", "bg-danger"
 	case "OL CHRG":
-		if olChrgOnlineModels[model] {
+		if olChrgOnlineModels[model] && charge >= 100 {
 			return "Online", "bg-success"
 		}
 		return "Ładowanie", "bg-warning"
@@ -303,7 +303,7 @@ func fetchServer(server NUTServer) []UPSCard {
 		status := vars["ups.status"]
 
 		moc := math.Round(realpower*load/100*10) / 10
-		statusLabel, statusColor := getStatusInfo(status, model)
+		statusLabel, statusColor := getStatusInfo(status, model, charge)
 
 		displayName := model
 		if name, ok := modelNames[model]; ok {
